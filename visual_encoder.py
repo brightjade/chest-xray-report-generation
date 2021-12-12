@@ -15,7 +15,7 @@ if __name__ == '__main__':
     print(out)
     print(nn.Sigmoid()(out))
 
-    # Or binary classification * N
+    # Or binary classification * N (for Grad-CAM)
     seresnet = timm.create_model('seresnet50', True, num_classes=num_classes*2)
     x = torch.randn((2, 3, 512, 512))  # B, C, H, W
     out = seresnet(x)
