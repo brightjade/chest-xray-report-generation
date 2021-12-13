@@ -21,7 +21,6 @@ if __name__ == '__main__':
     out = seresnet(x)
     # break by 2 then softmax
     nn.Softmax()
-    
 
     # then finetune ...
     # training code
