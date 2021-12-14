@@ -10,16 +10,16 @@ class MIMIC_CXR(torch.utils.data.dataset.Dataset):
 
         ## 파일은 완료되면 nas로 이동 예정
         if split == 'train':
-            with open('/home/gyuhyeonsim/asan/train_file_list.pickle', 'rb') as f:
+            with open('/home/nas1_userE/gyuhyeonsim/train_file_list.pickle', 'rb') as f:
                 self.file_list = pickle.load(f)['file_list']
                 # self.example = '/home/nas1_userE/gyuhyeonsim/physionet.org/files/mimic-cxr/2.0.0/files/p11/p11052737/s58244732/a63dd2df-4ff38ca9-db5e3c78-3ce15db6-5ef651cd.dcm'
 
         elif split == 'valid':
-            with open('/home/gyuhyeonsim/asan/valid_file_list.pickle', 'rb') as f:
+            with open('/home/nas1_userE/gyuhyeonsim/valid_file_list.pickle', 'rb') as f:
                 self.file_list = pickle.load(f)['file_list']
 
         elif split == 'test':
-            with open('/home/gyuhyeonsim/asan/test_file_list.pickle', 'rb') as f:
+            with open('/home/nas1_userE/gyuhyeonsim/test_file_list.pickle', 'rb') as f:
                 self.file_list = pickle.load(f)['file_list']
         self.resize = transforms.Resize((256, 256))
 
