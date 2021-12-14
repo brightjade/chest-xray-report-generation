@@ -31,7 +31,6 @@ class MIMIC_CXR(torch.utils.data.dataset.Dataset):
         patient_id = file_meta_info[-3]
         study_id = file_meta_info[-2]
         file_id = file_meta_info[-1]
-        print(base_path, patient_id, study_id, file_id)
 
         # Get report
         free_text_file = self.read_free_text(base_path + '/' + patient_id, study_id + '.txt')
@@ -43,12 +42,12 @@ class MIMIC_CXR(torch.utils.data.dataset.Dataset):
         dcm_image = sitk.ReadImage(target_file)
         dcm_np = sitk.GetArrayFromImage(dcm_image)
         dcm_tensor = torch.from_numpy(dcm_np.astype(np.float))
-        dcm_tensor /= dcm_tensor.max()
         dcm_tensor = dcm_tensor.float()
 
         # Preprocessing
         dcm_tensor = self.resize(dcm_tensor)
 
+        # noramlize
 
         return {'report': free_text_file,
                 'image': dcm_tensor}
@@ -61,5 +60,12 @@ class MIMIC_CXR(torch.utils.data.dataset.Dataset):
         strings = f.read()
         f.close()
         return strings
+
+    def noralize_xray(self, np):
+        # mean: 2549.440547823737
+        # std: 1490.4394489321774
+        np = (np-2549.440547823737)/1490.4394489321774
+        np = (np-np.min())/(np.max()-np.min())
+        return np
 
 # read_free_text('/home/nas1_userE/gyuhyeonsim/physionet.org/files/mimic-cxr/2.0.0/files/p16/p16802198', 's54334314.txt')
