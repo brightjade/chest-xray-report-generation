@@ -1,3 +1,6 @@
 .idea/
+.vscode/
+.cache/
+.checkpoints/
 __pycache__/
 data/
