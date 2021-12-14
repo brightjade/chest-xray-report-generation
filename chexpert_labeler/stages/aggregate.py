@@ -2,7 +2,7 @@
 import numpy as np
 from tqdm import tqdm
 
-from constants import *
+from ..constants import *
 
 
 class Aggregator(object):

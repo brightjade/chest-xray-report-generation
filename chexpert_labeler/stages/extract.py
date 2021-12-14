@@ -1,11 +1,12 @@
 """Define observation extractor class."""
-import re
 import itertools
+import re
 from collections import defaultdict
-from tqdm import tqdm
-from constants import *
 
 import bioc
+from tqdm import tqdm
+
+from ..constants import *
 
 
 class Extractor(object):
