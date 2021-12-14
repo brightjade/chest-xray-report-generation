@@ -1,6 +1,9 @@
 import SimpleITK as sitk
 import pickle
 import torch
+import numpy as np
+import torchvision.transforms as transforms
+
 
 class MIMIC_CXR(torch.utils.data.dataset.Dataset):
     def __init__(self, split):
@@ -18,6 +21,7 @@ class MIMIC_CXR(torch.utils.data.dataset.Dataset):
         elif split == 'test':
             with open('/home/gyuhyeonsim/asan/test_file_list.pickle', 'rb') as f:
                 self.file_list = pickle.load(f)['file_list']
+        self.resize = transforms.Resize((256, 256))
 
     def __getitem__(self, idx):
         # target_file = self.file_list[idx]
@@ -38,11 +42,16 @@ class MIMIC_CXR(torch.utils.data.dataset.Dataset):
         # Get image
         dcm_image = sitk.ReadImage(target_file)
         dcm_np = sitk.GetArrayFromImage(dcm_image)
+        dcm_tensor = torch.from_numpy(dcm_np.astype(np.float))
+        dcm_tensor /= dcm_tensor.max()
+        dcm_tensor = dcm_tensor.float()
 
-        # should be normalized
+        # Preprocessing
+        dcm_tensor = self.resize(dcm_tensor)
+
 
         return {'report': free_text_file,
-                'image': dcm_np}
+                'image': dcm_tensor}
 
     def read_free_text(self, patient_path, free_text):
         """
