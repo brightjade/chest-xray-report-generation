@@ -47,6 +47,7 @@ def parse_findings_from_txt(study_txt_path):
         # if pop_zero:
         #     findings.pop(0)
         findings = ''.join(findings).replace('\n \n ', '  ').replace('\n', '')
+        findings = findings.replace('"', '')
         findings = findings.split('  ')
         findings = [line+'\n' for line in findings]
         findings = [line for line in findings if line != '\n']
@@ -124,7 +125,7 @@ def main_sub(indices, patient_dirs, extractor, classifier, aggregator):
 def main():
     root_dir = '/home/nas1_userE/gyuhyeonsim/physionet.org/files/mimic-cxr/2.0.0/files'
     subdirs = [osp.join(root_dir, f'p1{i}') for i in range(10)]
-    num_proc = 20
+    num_proc = 1
     target_idx_subdir = int(sys.argv[1])
     target_idx_proc = int(sys.argv[2])
     # root
