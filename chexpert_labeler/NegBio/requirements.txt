@@ -1,5 +1,5 @@
 future>=0.16.0
-docutils>=0.14
+docutils==0.13.1
 docopt>=0.6.2
 pytest>=4.4.1
 networkx==1.11
