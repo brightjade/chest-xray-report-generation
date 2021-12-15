@@ -8,7 +8,7 @@ import torch
 from tqdm import tqdm
 
 from models import model_utils, caption
-from datasets import openi
+from datasets import openi, mimic_cxr
 import utils
 
 logger = logging.getLogger(__name__)
@@ -19,10 +19,14 @@ class Trainer:
         self.args = args
 
         ### Load data ###
-        loaders = openi.OpenIDataLoader(args, batch_size=args.batch_size)
+        # Mimic
+        loaders = mimic_cxr.MIMICCXRDataLoader(args, batch_size=args.batch_size)
         self.train_loader = loaders.train_loader
         self.val_loader = loaders.val_loader
-        # self.test_loader = loaders.test_loader
+        # Open-I
+        # loaders = openi.OpenIDataLoader(args, batch_size=args.batch_size)
+        # self.train_loader = loaders.train_loader
+        # self.val_loader = loaders.val_loader
 
         ### Load model ###
         self.model, self.criterion = caption.build_model(args)
@@ -126,12 +130,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     ### Model arguments ###
     parser.add_argument("--cache_dir", default=".cache/", type=str)
-
     # Backbone
     parser.add_argument("--backbone", type=str, default="resnet101")
     parser.add_argument("--position_embedding", type=str, default="sine")
     parser.add_argument("--dilation", action="store_false")
-
     # Transformer
     parser.add_argument("--hidden_dim", type=int, default=256)
     parser.add_argument("--pad_token_id", type=int, default=0)
@@ -144,13 +146,11 @@ if __name__ == "__main__":
     parser.add_argument("--dim_feedforward", type=int, default=2048)
     parser.add_argument("--nheads", type=int, default=8)
     parser.add_argument("--pre_norm", action="store_false")
-
-    # ### Data arguments ###
+    ### Data arguments ###
     parser.add_argument("--data_dir", type=str, default="./data/openi")
     parser.add_argument("--data_limit", type=int, default=-1)
-
-    # ### Training arguments ###
-    parser.add_argument("--output_dir", default=".checkpoints/openi/", type=str)
+    ### Training arguments ###
+    parser.add_argument("--output_dir", default=".checkpoints/mimiccxr/", type=str)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--lr_backbone", type=float, default=1e-5)
     parser.add_argument("--lr", type=float, default=1e-4)

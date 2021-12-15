@@ -3,7 +3,7 @@ from typing import Optional, List
 import torch
 from torch import Tensor
 
-MAX_DIM = 299
+MAX_DIM = 256
 
 def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     # TODO make this more general

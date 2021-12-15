@@ -90,6 +90,7 @@ class OpenIDataset(Dataset):
         self.image_dir = os.path.join(args.data_dir, 'images')
         self.report_dir = os.path.join(args.data_dir, 'reports')
         self.image_paths = self.get_image_paths()
+        import pdb; pdb.set_trace()
         self.report_paths = os.listdir(self.report_dir)
         self.skipped_images = set()
         self.filter_reports()
