@@ -1,19 +1,21 @@
 import os
+import os.path as osp
 import random
-import xmltodict
+
 import numpy as np
-from PIL import Image
-from tqdm import tqdm
-
+import pandas as pd
+import torch
 import torchvision.transforms.functional as TF
+import xmltodict
+from PIL import Image
+from torch.utils.data import DataLoader, Dataset, random_split
 from torchvision import transforms
-from torch.utils.data import Dataset, DataLoader, random_split
-
+from tqdm import tqdm
 from transformers import AutoTokenizer
 
 from .data_utils import nested_tensor_from_tensor_list
 
-MAX_DIM = 299
+MAX_DIM = 256
 
 
 def under_max(image):
@@ -57,11 +59,10 @@ val_transform = transforms.Compose([
 ])
 
 
-
 class Doc:
     def __init__(self, fd):
         self.parsed = xmltodict.parse(fd.read())
-    
+
     def get_id(self):
         return self.parsed['eCitation']['uId']['@id']
 
@@ -81,89 +82,73 @@ class Doc:
 
 class OpenIDataset(Dataset):
 
-    def __init__(self, args, transform=val_transform):
+    def __init__(self, args, mode, transform=val_transform):
         super().__init__()
         self.transform = transform
         self.max_seq_length = args.max_position_embeddings + 1
         self.tokenizer = AutoTokenizer.from_pretrained('allenai/scibert_scivocab_uncased',
-                                                        cache_dir=args.cache_dir if args.cache_dir else None)
+                                                       cache_dir=args.cache_dir if args.cache_dir else None)
         self.image_dir = os.path.join(args.data_dir, 'images')
         self.report_dir = os.path.join(args.data_dir, 'reports')
-        self.image_paths = self.get_image_paths()
-        import pdb; pdb.set_trace()
-        self.report_paths = os.listdir(self.report_dir)
-        self.skipped_images = set()
-        self.filter_reports()
-        self.clean_image_paths()    # exclude images without report
+        self.label_dir = osp.join(args.data_dir, 'labels')
+        with open(osp.join(args.data_dir, f'{mode}_img_names.txt'), 'r') as f:
+            self.img_names = f.readlines()
+        self.img_names = [i[:-1] for i in self.img_names]
 
-        print(f"# skipped images: {len(self.skipped_images)}")
-        print(f"# filtered images: {len(self.image_paths)}")
-
-    def get_image_paths(self):
-        return list(filter(lambda p: p[-3:]=="png", os.listdir(self.image_dir)))
-
-    def get_report_id_from_image_path(self, image_path):
-        return image_path.split('_')[0]
-
-    def filter_reports(self):
-        for path in tqdm(self.report_paths, desc="Filtering empty reports"):
-            with open(os.path.join(self.report_dir, path)) as fd:
-                doc = Doc(fd)
-                findings = doc.get_findings()
-                if findings == "":
-                    self.skipped_images.add(doc.get_id())
-
-    def clean_image_paths(self):
-        temp_image_paths = []
-        for image_name in self.image_paths:
-            report_id = image_name.split('_')[0]
-            if not (report_id in self.skipped_images):
-                temp_image_paths.append(image_name)
-        self.image_paths = temp_image_paths
-
-    def get_image(self, image_path):
-        image_full_path = os.path.join(self.image_dir, image_path)
+    def get_image(self, img_name):
+        image_full_path = os.path.join(self.image_dir, img_name)
         image = Image.open(image_full_path)
         if self.transform:
             image = self.transform(image)
         image = nested_tensor_from_tensor_list(image.unsqueeze(0))
         return image
 
-    def get_report(self, report_id):
-        # CXR<num> -> <num>
-        with open(os.path.join(self.report_dir, report_id[3:]+".xml")) as fd:
+    def get_label(self, img_name):
+        label_name = img_name.replace('.png', '_labeled.csv')
+        label_path = osp.join(self.label_dir, label_name)
+        df = pd.read_csv(label_path).fillna(0)
+        # assert self.columns == list(df.columns)
+        array = df.values[:, 2:]
+        label = np.sum(array, axis=0)
+        label = np.concatenate([[float((label == 0).all())], label])
+        label = label.astype(np.float)
+        label = torch.from_numpy(label).float()
+        label[label > 0] = 1
+        label[label < 0] = 0.5
+        return label
+
+    def get_report(self, img_name):
+        report_id = img_name.split('_')[0][3:]  # CXR<num>_... -> <num>
+        with open(os.path.join(self.report_dir, f"{report_id}.xml")) as fd:
             doc = Doc(fd)
-            findings = doc.get_findings()
-            caption_encoded = self.tokenizer.encode_plus(findings,
-                                                         max_length=self.max_seq_length,
-                                                         pad_to_max_length=True,
-                                                         return_attention_mask=True,
-                                                         return_token_type_ids=False,
-                                                         truncation=True)
-            caption = np.array(caption_encoded['input_ids'])
-            cap_mask = (1 - np.array(caption_encoded['attention_mask'])).astype(bool)
+        findings = doc.get_findings()
+        caption_encoded = self.tokenizer.encode_plus(findings,
+                                                     max_length=self.max_seq_length,
+                                                     pad_to_max_length=True,
+                                                     return_attention_mask=True,
+                                                     return_token_type_ids=False,
+                                                     truncation=True)
+        caption = np.array(caption_encoded['input_ids'])
+        cap_mask = (1 - np.array(caption_encoded['attention_mask'])).astype(bool)
 
         return caption, cap_mask
 
     def __len__(self):
-        return len(self.image_paths)
+        return len(self.img_names)
 
     def __getitem__(self, idx):
-        image_path = self.image_paths[idx]
-        image = self.get_image(image_path)
-        report_id = self.get_report_id_from_image_path(image_path)
-        caption, cap_mask = self.get_report(report_id)
-        return image.tensors.squeeze(0), image.mask.squeeze(0), caption, cap_mask
+        image = self.get_image(self.img_names[idx])
+        caption, cap_mask = self.get_report(self.img_names[idx])
+        label = self.get_label(self.img_names[idx])
+        return image.tensors.squeeze(0), image.mask.squeeze(0), caption, cap_mask, label
 
 
 class OpenIDataLoader:
 
     def __init__(self, args, batch_size):
-        dataset = OpenIDataset(args)
-        train_size = int(len(dataset)*0.7)
-        train_dataset, testval_dataset = random_split(dataset, [train_size, len(dataset) - train_size])
-        val_size = int(len(dataset)*0.2)
-        val_dataset, test_dataset = random_split(testval_dataset, [val_size, len(dataset) - train_size - val_size])
+        train_dataset = OpenIDataset(args, mode='train')
+        val_dataset = OpenIDataset(args, mode='val')
+        test_dataset = OpenIDataset(args, mode='test')
 
         self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
         self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False)

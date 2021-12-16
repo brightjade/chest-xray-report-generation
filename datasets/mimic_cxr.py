@@ -67,11 +67,11 @@ class MIMICCXRDataset(Dataset):
         self.columns = ['Reports', 'No Finding', 'Enlarged Cardiomediastinum', 'Cardiomegaly', 'Lung Lesion',
                         'Airspace Opacity', 'Edema', 'Consolidation', 'Pneumonia', 'Atelectasis',
                         'Pneumothorax', 'Pleural Effusion', 'Pleural Other', 'Fracture', 'Support Devices']
-        for image_path in self.image_paths:
-            label_name = osp.basename(osp.dirname(image_path)) + '_labeled.csv'
-            label_path = osp.join(osp.dirname(osp.dirname(image_path)), label_name)
-            txt_path = label_path.replace('_labeled.csv', '.txt')
-            assert osp.isfile(label_path), txt_path
+        # for image_path in self.image_paths:
+        #     label_name = osp.basename(osp.dirname(image_path)) + '_labeled.csv'
+        #     label_path = osp.join(osp.dirname(osp.dirname(image_path)), label_name)
+        #     txt_path = label_path.replace('_labeled.csv', '.txt')
+        #     assert osp.isfile(label_path), txt_path
 
     def get_report_path_from_image_path(self, image_path):
         file_meta_info = image_path.split('/')
@@ -108,17 +108,17 @@ class MIMICCXRDataset(Dataset):
         return label
 
     def get_report(self, report_path):
-        with open(report_path, 'r') as f:
-            text = f.read()
-            findings = text.split("FINDINGS:")[1].split("IMPRESSION:")[0].strip().replace("\n", "").replace("  ", " ")
-            caption_encoded = self.tokenizer.encode_plus(findings,
-                                                         max_length=self.max_seq_length,
-                                                         pad_to_max_length=True,
-                                                         return_attention_mask=True,
-                                                         return_token_type_ids=False,
-                                                         truncation=True)
-            caption = np.array(caption_encoded['input_ids'])
-            cap_mask = (1 - np.array(caption_encoded['attention_mask'])).astype(bool)
+        with open(report_path.replace('.txt', '.csv'), 'r') as f:
+            text = f.readlines()
+        findings = ' '.join([t[:-1] for t in text])
+        caption_encoded = self.tokenizer.encode_plus(findings,
+                                                     max_length=self.max_seq_length,
+                                                     pad_to_max_length=True,
+                                                     return_attention_mask=True,
+                                                     return_token_type_ids=False,
+                                                     truncation=True)
+        caption = np.array(caption_encoded['input_ids'])
+        cap_mask = (1 - np.array(caption_encoded['attention_mask'])).astype(bool)
 
         return caption, cap_mask
 
@@ -141,5 +141,5 @@ class MIMICCXRDataLoader:
         train_dataset = MIMICCXRDataset(args, transform=train_transform, split='train')
         valid_dataset = MIMICCXRDataset(args, transform=valid_transform, split='valid')
 
-        self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
-        self.val_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
+        self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True, num_workers=args.num_workers)
+        self.val_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, drop_last=False, num_workers=args.num_workers)

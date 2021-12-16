@@ -22,14 +22,16 @@ class Trainer:
         self.args = args
 
         ### Load data ###
-        # Mimic
-        loaders = mimic_cxr.MIMICCXRDataLoader(args, batch_size=args.batch_size)
-        self.train_loader = loaders.train_loader
-        self.val_loader = loaders.val_loader
-        # Open-I
-        # loaders = openi.OpenIDataLoader(args, batch_size=args.batch_size)
-        # self.train_loader = loaders.train_loader
-        # self.val_loader = loaders.val_loader
+        if args.dataset == 'mimiccxr':
+            # Mimic
+            loaders = mimic_cxr.MIMICCXRDataLoader(args, batch_size=args.batch_size)
+            self.train_loader = loaders.train_loader
+            self.val_loader = loaders.val_loader
+        elif args.dataset == 'openi':
+            # Open-I
+            loaders = openi.OpenIDataLoader(args, batch_size=args.batch_size)
+            self.train_loader = loaders.train_loader
+            self.val_loader = loaders.val_loader
 
         ### Load model ###
         self.model, self.criterion, self.criterion_cls = caption.build_model(args)
@@ -42,18 +44,13 @@ class Trainer:
         logger.info(f"Number of parameters: {n_params}")
 
         param_dicts = [
-            {
-                "params": [p for n, p in self.model.named_parameters()
-                           if "backbone" not in n and "classifier" not in n and p.requires_grad]},
-            {
-                "params": [p for n, p in self.model.named_parameters()
-                           if "classifier" in n and p.requires_grad],
-                "lr": args.lr_backbone,
-            },
-            {
-                "params": [p for n, p in self.model.named_parameters() if "backbone" in n and p.requires_grad],
-                "lr": args.lr_backbone,
-            },
+            {"params": [p for n, p in self.model.named_parameters()
+                        if "backbone" not in n and "classifier" not in n and p.requires_grad]},
+            {"params": [p for n, p in self.model.named_parameters()
+                        if "classifier" in n and p.requires_grad],
+                "lr": args.lr_backbone},
+            {"params": [p for n, p in self.model.named_parameters() if "backbone" in n and p.requires_grad],
+                "lr": args.lr_backbone},
         ]
         self.optimizer = torch.optim.AdamW(param_dicts, lr=args.lr, weight_decay=args.weight_decay)
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, args.lr_drop)
@@ -72,7 +69,7 @@ class Trainer:
                     'model': self.model.state_dict(),
                     'optimizer': self.optimizer.state_dict(),
                     'lr_scheduler': self.scheduler.state_dict(),
-                    'epoch': epoch+1,
+                    'epoch': epoch + 1,
                 }, os.path.join(self.args.output_dir, f"epoch{epoch+1}_{val_loss:.4f}.pt"))
 
     def __epoch_train(self):
@@ -83,7 +80,7 @@ class Trainer:
         train_loss = 0.
         total = len(self.train_loader)
 
-        with tqdm(total=total) as pbar:
+        with tqdm(desc='TRAIN', total=total, ncols=100) as pbar:
             for images, masks, caps, cap_masks, label in self.train_loader:
                 # samples.tensors (bs, 3, H, W) // samples.mask (bs, H, W)
                 # caps, cap_masks (bs, max_seq_length)
@@ -122,7 +119,7 @@ class Trainer:
         val_loss = 0.
         total = len(self.val_loader)
 
-        with tqdm(total=total) as pbar:
+        with tqdm(desc='VAL', total=total, ncols=100) as pbar:
             for images, masks, caps, cap_masks, label in self.val_loader:
                 samples = model_utils.NestedTensor(images, masks).to(self.args.device)
                 caps = caps.to(self.args.device)
@@ -163,16 +160,19 @@ if __name__ == "__main__":
     parser.add_argument("--nheads", type=int, default=8)
     parser.add_argument("--pre_norm", action="store_false")
     ### Data arguments ###
-    parser.add_argument("--data_dir", type=str, default="./data/openi")
+    parser.add_argument('--dataset', type=str, default='openi')
+    parser.add_argument("--data_dir", type=str, default="/home/nas1_userA/minseokchoi20/"
+                        "coursework/2021fall/ai604/ai604-cv-project/data/openi")
     parser.add_argument("--data_limit", type=int, default=-1)
     ### Training arguments ###
     parser.add_argument("--output_dir", default=".checkpoints/mimiccxr/", type=str)
-    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--lr_backbone", type=float, default=1e-5)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--lr_drop", type=int, default=20)
     parser.add_argument("--weight_decay", type=float, default=1e-4)
     parser.add_argument("--clip_max_norm", type=float, default=0.1)
+    parser.add_argument("--num_workers", type=int, default=32)
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--seed", type=int, default=42)
 
