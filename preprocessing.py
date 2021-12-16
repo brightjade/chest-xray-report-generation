@@ -22,11 +22,12 @@ def parse_findings_from_txt(study_txt_path):
     finding_idx = -1
     impression_idx = -1  # or CONCLUSION:
     for idx, line in enumerate(report):
-        if 'FINDINGS:' in line:
+        if 'FINDINGS:' in line or 'FINDINGS AND IMPRESSION:' in line:
             finding_idx = idx
-        elif 'IMPRESSION:' in line or 'CONCLUSION:' in line:
-            impression_idx = idx
-            break
+        elif finding_idx != -1:
+            if 'IMPRESSION:' in line or 'CONCLUSION:' in line:
+                impression_idx = idx
+                break
 
     if finding_idx != -1:
         if impression_idx != -1:

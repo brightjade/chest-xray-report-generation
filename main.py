@@ -1,15 +1,18 @@
 import os
+
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-import sys
+
 import argparse
 import logging
 import math
+import sys
+
 import torch
 from tqdm import tqdm
 
-from models import model_utils, caption
-from datasets import openi, mimic_cxr
 import utils
+from datasets import mimic_cxr, openi
+from models import caption, model_utils
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +32,7 @@ class Trainer:
         # self.val_loader = loaders.val_loader
 
         ### Load model ###
-        self.model, self.criterion = caption.build_model(args)
+        self.model, self.criterion, self.criterion_cls = caption.build_model(args)
         # if we use bert tokenizer, we can load COCO-pretrained model
         # self.model = torch.hub.load('saahiluppal/catr', 'v3', pretrained=True)
         self.model.to(args.device)
@@ -39,7 +42,14 @@ class Trainer:
         logger.info(f"Number of parameters: {n_params}")
 
         param_dicts = [
-            {"params": [p for n, p in self.model.named_parameters() if "backbone" not in n and p.requires_grad]},
+            {
+                "params": [p for n, p in self.model.named_parameters()
+                           if "backbone" not in n and "classifier" not in n and p.requires_grad]},
+            {
+                "params": [p for n, p in self.model.named_parameters()
+                           if "classifier" in n and p.requires_grad],
+                "lr": args.lr_backbone,
+            },
             {
                 "params": [p for n, p in self.model.named_parameters() if "backbone" in n and p.requires_grad],
                 "lr": args.lr_backbone,
@@ -47,7 +57,6 @@ class Trainer:
         ]
         self.optimizer = torch.optim.AdamW(param_dicts, lr=args.lr, weight_decay=args.weight_decay)
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, args.lr_drop)
-
 
     def train(self):
         best_val_loss = 10000
@@ -65,26 +74,29 @@ class Trainer:
                     'lr_scheduler': self.scheduler.state_dict(),
                     'epoch': epoch+1,
                 }, os.path.join(self.args.output_dir, f"epoch{epoch+1}_{val_loss:.4f}.pt"))
-            
 
     def __epoch_train(self):
         self.model.train()
         self.criterion.train()
+        self.criterion_cls.train()
 
         train_loss = 0.
         total = len(self.train_loader)
 
         with tqdm(total=total) as pbar:
-            for images, masks, caps, cap_masks in self.train_loader:
+            for images, masks, caps, cap_masks, label in self.train_loader:
                 # samples.tensors (bs, 3, H, W) // samples.mask (bs, H, W)
                 # caps, cap_masks (bs, max_seq_length)
                 samples = model_utils.NestedTensor(images, masks).to(self.args.device)
                 caps = caps.to(self.args.device)
                 cap_masks = cap_masks.to(self.args.device)
+                label = label.to(self.args.device).float()
 
                 # outputs (bs, max_seq_length, vocab_size)
-                outputs = self.model(samples, caps[:, :-1], cap_masks[:, :-1])
-                loss = self.criterion(outputs.permute(0, 2, 1), caps[:, 1:])
+                outputs, out_cls = self.model(samples, caps[:, :-1], cap_masks[:, :-1])
+                loss_nlp = self.criterion(outputs.permute(0, 2, 1), caps[:, 1:])
+                loss_cls = self.criterion_cls(out_cls, label)
+                loss = loss_cls + loss_nlp
                 loss_value = loss.item()
                 train_loss += loss_value
 
@@ -99,25 +111,28 @@ class Trainer:
                 self.optimizer.step()
 
                 pbar.update(1)
-        
-        return train_loss / total
 
+        return train_loss / total
 
     def __epoch_val(self):
         self.model.eval()
         self.criterion.eval()
+        self.criterion_cls.eval()
 
         val_loss = 0.
         total = len(self.val_loader)
 
         with tqdm(total=total) as pbar:
-            for images, masks, caps, cap_masks in self.val_loader:
+            for images, masks, caps, cap_masks, label in self.val_loader:
                 samples = model_utils.NestedTensor(images, masks).to(self.args.device)
                 caps = caps.to(self.args.device)
                 cap_masks = cap_masks.to(self.args.device)
+                label = label.to(self.args.device).float()
 
-                outputs = self.model(samples, caps[:, :-1], cap_masks[:, :-1])
-                loss = self.criterion(outputs.permute(0, 2, 1), caps[:, 1:])
+                outputs, out_cls = self.model(samples, caps[:, :-1], cap_masks[:, :-1])
+                loss_nlp = self.criterion(outputs.permute(0, 2, 1), caps[:, 1:])
+                loss_cls = self.criterion_cls(out_cls, label)
+                loss = loss_cls + loss_nlp
 
                 val_loss += loss.item()
 
@@ -134,6 +149,7 @@ if __name__ == "__main__":
     parser.add_argument("--backbone", type=str, default="resnet101")
     parser.add_argument("--position_embedding", type=str, default="sine")
     parser.add_argument("--dilation", action="store_false")
+    parser.add_argument("--num_classes", type=int, default=14)
     # Transformer
     parser.add_argument("--hidden_dim", type=int, default=256)
     parser.add_argument("--pad_token_id", type=int, default=0)

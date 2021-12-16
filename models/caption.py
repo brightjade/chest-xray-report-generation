@@ -5,12 +5,14 @@ import torch.nn.functional as F
 from .model_utils import NestedTensor, nested_tensor_from_tensor_list
 from .backbone import build_backbone
 from .transformer import build_transformer
+from .classifier import build_classifier
 
 
 class Caption(nn.Module):
-    def __init__(self, backbone, transformer, hidden_dim, vocab_size):
+    def __init__(self, backbone, classifier, transformer, hidden_dim, vocab_size):
         super().__init__()
         self.backbone = backbone
+        self.classifier = classifier
         self.input_proj = nn.Conv2d(
             backbone.num_channels, hidden_dim, kernel_size=1)
         self.transformer = transformer
@@ -22,13 +24,14 @@ class Caption(nn.Module):
 
         features, pos = self.backbone(samples)
         src, mask = features[-1].decompose()
+        out_cls = self.classifier(src)
 
         assert mask is not None
 
         hs = self.transformer(self.input_proj(src), mask,
                               pos[-1], target, target_mask)
         out = self.mlp(hs.permute(1, 0, 2))
-        return out
+        return out, out_cls
 
 
 class MLP(nn.Module):
@@ -49,9 +52,11 @@ class MLP(nn.Module):
 
 def build_model(config):
     backbone = build_backbone(config)
+    classifier = build_classifier(config)
     transformer = build_transformer(config)
 
-    model = Caption(backbone, transformer, config.hidden_dim, config.vocab_size)
+    model = Caption(backbone, classifier, transformer, config.hidden_dim, config.vocab_size)
     criterion = torch.nn.CrossEntropyLoss()
+    criterion_cls = torch.nn.BCELoss()
 
-    return model, criterion
+    return model, criterion, criterion_cls
