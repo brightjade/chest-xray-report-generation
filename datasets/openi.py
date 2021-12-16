@@ -104,7 +104,8 @@ class OpenIDataset(Dataset):
         return image
 
     def get_label(self, img_name):
-        label_name = img_name.replace('.png', '_labeled.csv')
+        report_id = img_name.split('_')[0][3:]  # CXR<num>_... -> <num>
+        label_name = f'{report_id}_labeled.csv'
         label_path = osp.join(self.label_dir, label_name)
         df = pd.read_csv(label_path).fillna(0)
         # assert self.columns == list(df.columns)

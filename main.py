@@ -165,7 +165,6 @@ if __name__ == "__main__":
                         "coursework/2021fall/ai604/ai604-cv-project/data/openi")
     parser.add_argument("--data_limit", type=int, default=-1)
     ### Training arguments ###
-    parser.add_argument("--output_dir", default=".checkpoints/mimiccxr/", type=str)
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--lr_backbone", type=float, default=1e-5)
     parser.add_argument("--lr", type=float, default=1e-4)
@@ -178,6 +177,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    args.output_dir = f".checkpoints/{args.dataset}/"
     args.n_gpu = torch.cuda.device_count()
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
